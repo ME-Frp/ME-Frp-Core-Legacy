@@ -27,25 +27,25 @@ import (
 func init() {
 	RegisterCommonFlags(stcpCmd)
 
-	stcpCmd.PersistentFlags().StringVarP(&proxyName, "proxy_name", "n", "", "proxy name")
-	stcpCmd.PersistentFlags().StringVarP(&role, "role", "", "server", "role")
-	stcpCmd.PersistentFlags().StringVarP(&sk, "sk", "", "", "secret key")
-	stcpCmd.PersistentFlags().StringVarP(&serverName, "server_name", "", "", "server name")
-	stcpCmd.PersistentFlags().StringVarP(&localIP, "local_ip", "i", "127.0.0.1", "local ip")
-	stcpCmd.PersistentFlags().IntVarP(&localPort, "local_port", "l", 0, "local port")
-	stcpCmd.PersistentFlags().StringVarP(&bindAddr, "bind_addr", "", "", "bind addr")
-	stcpCmd.PersistentFlags().IntVarP(&bindPort, "bind_port", "", 0, "bind port")
-	stcpCmd.PersistentFlags().BoolVarP(&useEncryption, "ue", "", false, "use encryption")
-	stcpCmd.PersistentFlags().BoolVarP(&useCompression, "uc", "", false, "use compression")
-	stcpCmd.PersistentFlags().StringVarP(&bandwidthLimit, "bandwidth_limit", "", "", "bandwidth limit")
-	stcpCmd.PersistentFlags().StringVarP(&bandwidthLimitMode, "bandwidth_limit_mode", "", config.BandwidthLimitModeClient, "bandwidth limit mode")
+	stcpCmd.PersistentFlags().StringVarP(&proxyName, "proxy_name", "n", "", "隧道名称")
+	stcpCmd.PersistentFlags().StringVarP(&role, "role", "", "server", "角色")
+	stcpCmd.PersistentFlags().StringVarP(&sk, "sk", "", "", "密钥")
+	stcpCmd.PersistentFlags().StringVarP(&serverName, "server_name", "", "", "服务器名称")
+	stcpCmd.PersistentFlags().StringVarP(&localIP, "local_ip", "i", "127.0.0.1", "本地 IP")
+	stcpCmd.PersistentFlags().IntVarP(&localPort, "local_port", "l", 0, "本地端口")
+	stcpCmd.PersistentFlags().StringVarP(&bindAddr, "bind_addr", "", "", "绑定地址")
+	stcpCmd.PersistentFlags().IntVarP(&bindPort, "bind_port", "", 0, "绑定端口")
+	stcpCmd.PersistentFlags().BoolVarP(&useEncryption, "ue", "", false, "启用加密")
+	stcpCmd.PersistentFlags().BoolVarP(&useCompression, "uc", "", false, "启用压缩")
+	stcpCmd.PersistentFlags().StringVarP(&bandwidthLimit, "bandwidth_limit", "", "", "带宽限制")
+	stcpCmd.PersistentFlags().StringVarP(&bandwidthLimitMode, "bandwidth_limit_mode", "", config.BandwidthLimitModeClient, "带宽限制模式")
 
 	rootCmd.AddCommand(stcpCmd)
 }
 
 var stcpCmd = &cobra.Command{
 	Use:   "stcp",
-	Short: "Run frpc with a single stcp proxy",
+	Short: "启动 [stcp] 隧道",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		clientCfg, err := parseClientCommonCfgFromCmd()
 		if err != nil {
@@ -102,7 +102,7 @@ var stcpCmd = &cobra.Command{
 			}
 			visitorConfs[cfg.ProxyName] = cfg
 		default:
-			fmt.Println("invalid role")
+			fmt.Println("无效的角色")
 			os.Exit(1)
 		}
 

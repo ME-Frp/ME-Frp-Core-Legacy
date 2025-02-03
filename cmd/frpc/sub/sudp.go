@@ -27,25 +27,25 @@ import (
 func init() {
 	RegisterCommonFlags(sudpCmd)
 
-	sudpCmd.PersistentFlags().StringVarP(&proxyName, "proxy_name", "n", "", "proxy name")
-	sudpCmd.PersistentFlags().StringVarP(&role, "role", "", "server", "role")
-	sudpCmd.PersistentFlags().StringVarP(&sk, "sk", "", "", "secret key")
-	sudpCmd.PersistentFlags().StringVarP(&serverName, "server_name", "", "", "server name")
-	sudpCmd.PersistentFlags().StringVarP(&localIP, "local_ip", "i", "127.0.0.1", "local ip")
-	sudpCmd.PersistentFlags().IntVarP(&localPort, "local_port", "l", 0, "local port")
-	sudpCmd.PersistentFlags().StringVarP(&bindAddr, "bind_addr", "", "", "bind addr")
-	sudpCmd.PersistentFlags().IntVarP(&bindPort, "bind_port", "", 0, "bind port")
-	sudpCmd.PersistentFlags().BoolVarP(&useEncryption, "ue", "", false, "use encryption")
-	sudpCmd.PersistentFlags().BoolVarP(&useCompression, "uc", "", false, "use compression")
-	sudpCmd.PersistentFlags().StringVarP(&bandwidthLimit, "bandwidth_limit", "", "", "bandwidth limit")
-	sudpCmd.PersistentFlags().StringVarP(&bandwidthLimitMode, "bandwidth_limit_mode", "", config.BandwidthLimitModeClient, "bandwidth limit mode")
+	sudpCmd.PersistentFlags().StringVarP(&proxyName, "proxy_name", "n", "", "隧道名称")
+	sudpCmd.PersistentFlags().StringVarP(&role, "role", "", "server", "角色")
+	sudpCmd.PersistentFlags().StringVarP(&sk, "sk", "", "", "密钥")
+	sudpCmd.PersistentFlags().StringVarP(&serverName, "server_name", "", "", "服务器名称")
+	sudpCmd.PersistentFlags().StringVarP(&localIP, "local_ip", "i", "127.0.0.1", "本地 IP")
+	sudpCmd.PersistentFlags().IntVarP(&localPort, "local_port", "l", 0, "本地端口")
+	sudpCmd.PersistentFlags().StringVarP(&bindAddr, "bind_addr", "", "", "绑定地址")
+	sudpCmd.PersistentFlags().IntVarP(&bindPort, "bind_port", "", 0, "绑定端口")
+	sudpCmd.PersistentFlags().BoolVarP(&useEncryption, "ue", "", false, "启用加密")
+	sudpCmd.PersistentFlags().BoolVarP(&useCompression, "uc", "", false, "启用压缩")
+	sudpCmd.PersistentFlags().StringVarP(&bandwidthLimit, "bandwidth_limit", "", "", "带宽限制")
+	sudpCmd.PersistentFlags().StringVarP(&bandwidthLimitMode, "bandwidth_limit_mode", "", config.BandwidthLimitModeClient, "带宽限制模式")
 
 	rootCmd.AddCommand(sudpCmd)
 }
 
 var sudpCmd = &cobra.Command{
 	Use:   "sudp",
-	Short: "Run frpc with a single sudp proxy",
+	Short: "启动 [sudp] 隧道",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		clientCfg, err := parseClientCommonCfgFromCmd()
 		if err != nil {
@@ -102,7 +102,7 @@ var sudpCmd = &cobra.Command{
 			}
 			visitorConfs[cfg.ProxyName] = cfg
 		default:
-			fmt.Println("invalid role")
+			fmt.Println("无效的角色")
 			os.Exit(1)
 		}
 

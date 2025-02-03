@@ -57,17 +57,17 @@ func (pxy *XTCPProxy) InWorkConn(conn net.Conn, startWorkConnMsg *msg.StartWorkC
 	var natHoleSidMsg msg.NatHoleSid
 	err := msg.ReadMsgInto(conn, &natHoleSidMsg)
 	if err != nil {
-		xl.Error("xtcp read from workConn error: %v", err)
+		xl.Error("XTCP 从工作连接读取数据失败: %v", err)
 		return
 	}
 
-	xl.Trace("nathole prepare start")
+	xl.Trace("XTCP 开始准备 NAT")
 	prepareResult, err := nathole.Prepare([]string{pxy.clientCfg.NatHoleSTUNServer})
 	if err != nil {
-		xl.Warn("nathole prepare error: %v", err)
+		xl.Warn("XTCP 准备 NAT 失败: %v", err)
 		return
 	}
-	xl.Info("nathole prepare success, nat type: %s, behavior: %s, addresses: %v, assistedAddresses: %v",
+	xl.Info("XTCP 准备 NAT 成功, 类型: [%s], 行为: [%s], 地址: [%v], 辅助地址: [%v]",
 		prepareResult.NatType, prepareResult.Behavior, prepareResult.Addrs, prepareResult.AssistedAddrs)
 	defer prepareResult.ListenConn.Close()
 
@@ -81,14 +81,14 @@ func (pxy *XTCPProxy) InWorkConn(conn net.Conn, startWorkConnMsg *msg.StartWorkC
 		AssistedAddrs: prepareResult.AssistedAddrs,
 	}
 
-	xl.Trace("nathole exchange info start")
+	xl.Trace("开始交换 NAT 信息")
 	natHoleRespMsg, err := nathole.ExchangeInfo(pxy.ctx, pxy.msgTransporter, transactionID, natHoleClientMsg, 5*time.Second)
 	if err != nil {
-		xl.Warn("nathole exchange info error: %v", err)
+		xl.Warn("交换 NAT 信息失败: %v", err)
 		return
 	}
 
-	xl.Info("get natHoleRespMsg, sid [%s], protocol [%s], candidate address %v, assisted address %v, detectBehavior: %+v",
+	xl.Info("收到 NAT 响应, sid [%s], 协议: [%s], 候选地址: [%v], 辅助地址: [%v], 检测行为: [%+v]",
 		natHoleRespMsg.Sid, natHoleRespMsg.Protocol, natHoleRespMsg.CandidateAddrs,
 		natHoleRespMsg.AssistedAddrs, natHoleRespMsg.DetectBehavior)
 
@@ -96,7 +96,7 @@ func (pxy *XTCPProxy) InWorkConn(conn net.Conn, startWorkConnMsg *msg.StartWorkC
 	newListenConn, raddr, err := nathole.MakeHole(pxy.ctx, listenConn, natHoleRespMsg, []byte(pxy.cfg.Sk))
 	if err != nil {
 		listenConn.Close()
-		xl.Warn("make hole error: %v", err)
+		xl.Warn("XTCP NAT 打洞失败: %v", err)
 		_ = pxy.msgTransporter.Send(&msg.NatHoleReport{
 			Sid:     natHoleRespMsg.Sid,
 			Success: false,
@@ -104,7 +104,7 @@ func (pxy *XTCPProxy) InWorkConn(conn net.Conn, startWorkConnMsg *msg.StartWorkC
 		return
 	}
 	listenConn = newListenConn
-	xl.Info("establishing nat hole connection successful, sid [%s], remoteAddr [%s]", natHoleRespMsg.Sid, raddr)
+	xl.Info("XTCP NAT 打洞成功, sid [%s], 远程地址: [%s]", natHoleRespMsg.Sid, raddr)
 
 	_ = pxy.msgTransporter.Send(&msg.NatHoleReport{
 		Sid:     natHoleRespMsg.Sid,
@@ -126,14 +126,14 @@ func (pxy *XTCPProxy) listenByKCP(listenConn *net.UDPConn, raddr *net.UDPAddr, s
 	laddr, _ := net.ResolveUDPAddr("udp", listenConn.LocalAddr().String())
 	lConn, err := net.DialUDP("udp", laddr, raddr)
 	if err != nil {
-		xl.Warn("dial udp error: %v", err)
+		xl.Warn("连接 UDP 失败: %v", err)
 		return
 	}
 	defer lConn.Close()
 
 	remote, err := utilnet.NewKCPConnFromUDP(lConn, true, raddr.String())
 	if err != nil {
-		xl.Warn("create kcp connection from udp connection error: %v", err)
+		xl.Warn("从 UDP 连接创建 KCP 连接失败: %v", err)
 		return
 	}
 
@@ -143,7 +143,7 @@ func (pxy *XTCPProxy) listenByKCP(listenConn *net.UDPConn, raddr *net.UDPAddr, s
 	fmuxCfg.LogOutput = io.Discard
 	session, err := fmux.Server(remote, fmuxCfg)
 	if err != nil {
-		xl.Error("create mux session error: %v", err)
+		xl.Error("创建 Mux 会话失败: %v", err)
 		return
 	}
 	defer session.Close()
@@ -151,7 +151,7 @@ func (pxy *XTCPProxy) listenByKCP(listenConn *net.UDPConn, raddr *net.UDPAddr, s
 	for {
 		muxConn, err := session.Accept()
 		if err != nil {
-			xl.Error("accept connection error: %v", err)
+			xl.Error("接收连接失败: %v", err)
 			return
 		}
 		go pxy.HandleTCPWorkConnection(muxConn, startWorkConnMsg, []byte(pxy.cfg.Sk))
@@ -164,7 +164,7 @@ func (pxy *XTCPProxy) listenByQUIC(listenConn *net.UDPConn, _ *net.UDPAddr, star
 
 	tlsConfig, err := transport.NewServerTLSConfig("", "", "")
 	if err != nil {
-		xl.Warn("create tls config error: %v", err)
+		xl.Warn("创建 TLS 配置失败: %v", err)
 		return
 	}
 	tlsConfig.NextProtos = []string{"frp"}
@@ -176,19 +176,19 @@ func (pxy *XTCPProxy) listenByQUIC(listenConn *net.UDPConn, _ *net.UDPAddr, star
 		},
 	)
 	if err != nil {
-		xl.Warn("dial quic error: %v", err)
+		xl.Warn("连接 QUIC 错误: %v", err)
 		return
 	}
 	// only accept one connection from raddr
 	c, err := quicListener.Accept(pxy.ctx)
 	if err != nil {
-		xl.Error("quic accept connection error: %v", err)
+		xl.Error("QUIC 接收连接错误: %v", err)
 		return
 	}
 	for {
 		stream, err := c.AcceptStream(pxy.ctx)
 		if err != nil {
-			xl.Debug("quic accept stream error: %v", err)
+			xl.Debug("QUIC 接收流错误: %v", err)
 			_ = c.CloseWithError(0, "")
 			return
 		}

@@ -28,26 +28,26 @@ import (
 func init() {
 	RegisterCommonFlags(httpCmd)
 
-	httpCmd.PersistentFlags().StringVarP(&proxyName, "proxy_name", "n", "", "proxy name")
-	httpCmd.PersistentFlags().StringVarP(&localIP, "local_ip", "i", "127.0.0.1", "local ip")
-	httpCmd.PersistentFlags().IntVarP(&localPort, "local_port", "l", 0, "local port")
-	httpCmd.PersistentFlags().StringVarP(&customDomains, "custom_domain", "d", "", "custom domain")
-	httpCmd.PersistentFlags().StringVarP(&subDomain, "sd", "", "", "sub domain")
-	httpCmd.PersistentFlags().StringVarP(&locations, "locations", "", "", "locations")
-	httpCmd.PersistentFlags().StringVarP(&httpUser, "http_user", "", "", "http auth user")
-	httpCmd.PersistentFlags().StringVarP(&httpPwd, "http_pwd", "", "", "http auth password")
-	httpCmd.PersistentFlags().StringVarP(&hostHeaderRewrite, "host_header_rewrite", "", "", "host header rewrite")
-	httpCmd.PersistentFlags().BoolVarP(&useEncryption, "ue", "", false, "use encryption")
-	httpCmd.PersistentFlags().BoolVarP(&useCompression, "uc", "", false, "use compression")
-	httpCmd.PersistentFlags().StringVarP(&bandwidthLimit, "bandwidth_limit", "", "", "bandwidth limit")
-	httpCmd.PersistentFlags().StringVarP(&bandwidthLimitMode, "bandwidth_limit_mode", "", config.BandwidthLimitModeClient, "bandwidth limit mode")
+	httpCmd.PersistentFlags().StringVarP(&proxyName, "proxy_name", "n", "", "隧道名称")
+	httpCmd.PersistentFlags().StringVarP(&localIP, "local_ip", "i", "127.0.0.1", "本地 IP")
+	httpCmd.PersistentFlags().IntVarP(&localPort, "local_port", "l", 0, "本地端口")
+	httpCmd.PersistentFlags().StringVarP(&customDomains, "custom_domain", "d", "", "自定义域名")
+	httpCmd.PersistentFlags().StringVarP(&subDomain, "sd", "", "", "子域名")
+	httpCmd.PersistentFlags().StringVarP(&locations, "locations", "", "", "Locations")
+	httpCmd.PersistentFlags().StringVarP(&httpUser, "http_user", "", "", "HTTP 认证用户")
+	httpCmd.PersistentFlags().StringVarP(&httpPwd, "http_pwd", "", "", "HTTP 认证密码")
+	httpCmd.PersistentFlags().StringVarP(&hostHeaderRewrite, "host_header_rewrite", "", "", "Host Header Rewrite")
+	httpCmd.PersistentFlags().BoolVarP(&useEncryption, "ue", "", false, "启用加密")
+	httpCmd.PersistentFlags().BoolVarP(&useCompression, "uc", "", false, "启用压缩")
+	httpCmd.PersistentFlags().StringVarP(&bandwidthLimit, "bandwidth_limit", "", "", "带宽限制")
+	httpCmd.PersistentFlags().StringVarP(&bandwidthLimitMode, "bandwidth_limit_mode", "", config.BandwidthLimitModeClient, "带宽限制模式")
 
 	rootCmd.AddCommand(httpCmd)
 }
 
 var httpCmd = &cobra.Command{
 	Use:   "http",
-	Short: "Run frpc with a single http proxy",
+	Short: "启动 [http] 隧道",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		clientCfg, err := parseClientCommonCfgFromCmd()
 		if err != nil {

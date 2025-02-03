@@ -28,22 +28,22 @@ import (
 func init() {
 	RegisterCommonFlags(httpsCmd)
 
-	httpsCmd.PersistentFlags().StringVarP(&proxyName, "proxy_name", "n", "", "proxy name")
-	httpsCmd.PersistentFlags().StringVarP(&localIP, "local_ip", "i", "127.0.0.1", "local ip")
-	httpsCmd.PersistentFlags().IntVarP(&localPort, "local_port", "l", 0, "local port")
-	httpsCmd.PersistentFlags().StringVarP(&customDomains, "custom_domain", "d", "", "custom domain")
-	httpsCmd.PersistentFlags().StringVarP(&subDomain, "sd", "", "", "sub domain")
-	httpsCmd.PersistentFlags().BoolVarP(&useEncryption, "ue", "", false, "use encryption")
-	httpsCmd.PersistentFlags().BoolVarP(&useCompression, "uc", "", false, "use compression")
-	httpsCmd.PersistentFlags().StringVarP(&bandwidthLimit, "bandwidth_limit", "", "", "bandwidth limit")
-	httpsCmd.PersistentFlags().StringVarP(&bandwidthLimitMode, "bandwidth_limit_mode", "", config.BandwidthLimitModeClient, "bandwidth limit mode")
+	httpsCmd.PersistentFlags().StringVarP(&proxyName, "proxy_name", "n", "", "隧道名称")
+	httpsCmd.PersistentFlags().StringVarP(&localIP, "local_ip", "i", "127.0.0.1", "本地 IP")
+	httpsCmd.PersistentFlags().IntVarP(&localPort, "local_port", "l", 0, "本地端口")
+	httpsCmd.PersistentFlags().StringVarP(&customDomains, "custom_domain", "d", "", "自定义域名")
+	httpsCmd.PersistentFlags().StringVarP(&subDomain, "sd", "", "", "子域名")
+	httpsCmd.PersistentFlags().BoolVarP(&useEncryption, "ue", "", false, "启用加密")
+	httpsCmd.PersistentFlags().BoolVarP(&useCompression, "uc", "", false, "启用压缩")
+	httpsCmd.PersistentFlags().StringVarP(&bandwidthLimit, "bandwidth_limit", "", "", "带宽限制")
+	httpsCmd.PersistentFlags().StringVarP(&bandwidthLimitMode, "bandwidth_limit_mode", "", config.BandwidthLimitModeClient, "带宽限制模式")
 
 	rootCmd.AddCommand(httpsCmd)
 }
 
 var httpsCmd = &cobra.Command{
 	Use:   "https",
-	Short: "Run frpc with a single https proxy",
+	Short: "启动 [https] 隧道",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		clientCfg, err := parseClientCommonCfgFromCmd()
 		if err != nil {

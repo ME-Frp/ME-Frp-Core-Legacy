@@ -132,13 +132,13 @@ func (pxy *BaseProxy) HandleTCPWorkConnection(workConn net.Conn, m *msg.StartWor
 		})
 	}
 
-	xl.Trace("handle tcp work connection, use_encryption: %t, use_compression: %t",
+	xl.Trace("处理 TCP 工作连接, 数据加密: [%t], 数据压缩: [%t]",
 		baseConfig.UseEncryption, baseConfig.UseCompression)
 	if baseConfig.UseEncryption {
 		remote, err = libio.WithEncryption(remote, encKey)
 		if err != nil {
 			workConn.Close()
-			xl.Error("create encryption stream error: %v", err)
+			xl.Error("创建加密流错误: %v", err)
 			return
 		}
 	}
@@ -182,9 +182,9 @@ func (pxy *BaseProxy) HandleTCPWorkConnection(workConn net.Conn, m *msg.StartWor
 
 	if pxy.proxyPlugin != nil {
 		// if plugin is set, let plugin handle connection first
-		xl.Debug("handle by plugin: %s", pxy.proxyPlugin.Name())
+		xl.Debug("通过 Plugin 处理: [%s]", pxy.proxyPlugin.Name())
 		pxy.proxyPlugin.Handle(remote, workConn, extraInfo)
-		xl.Debug("handle by plugin finished")
+		xl.Debug("通过 Plugin 处理完成")
 		return
 	}
 
@@ -194,17 +194,17 @@ func (pxy *BaseProxy) HandleTCPWorkConnection(workConn net.Conn, m *msg.StartWor
 	)
 	if err != nil {
 		workConn.Close()
-		xl.Error("connect to local service [%s:%d] error: %v", baseConfig.LocalIP, baseConfig.LocalPort, err)
+		xl.Error("连接到本地服务 [%s:%d] 错误: %v\n请检查本地服务是否正常启动", baseConfig.LocalIP, baseConfig.LocalPort, err)
 		return
 	}
 
-	xl.Debug("join connections, localConn(l[%s] r[%s]) workConn(l[%s] r[%s])", localConn.LocalAddr().String(),
+	xl.Debug("连接已建立, 本地连接(本地[%s] 远程[%s]) 工作连接(本地[%s] 远程[%s])", localConn.LocalAddr().String(),
 		localConn.RemoteAddr().String(), workConn.LocalAddr().String(), workConn.RemoteAddr().String())
 
 	if len(extraInfo) > 0 {
 		if _, err := localConn.Write(extraInfo); err != nil {
 			workConn.Close()
-			xl.Error("write extraInfo to local conn error: %v", err)
+			xl.Error("写入 Proxy Protocol Header 到本地连接错误: %v", err)
 			return
 		}
 	}

@@ -113,7 +113,7 @@ func NewWrapper(
 		pw.monitor = health.NewMonitor(pw.ctx, baseInfo.HealthCheckType, baseInfo.HealthCheckIntervalS,
 			baseInfo.HealthCheckTimeoutS, baseInfo.HealthCheckMaxFailed, baseInfo.HealthCheckAddr,
 			baseInfo.HealthCheckURL, pw.statusNormalCallback, pw.statusFailedCallback)
-		xl.Trace("enable health check monitor")
+		xl.Trace("启用 HealthCheck 监控")
 	}
 
 	pw.pxy = NewProxy(pw.ctx, pw.Cfg, clientCfg, pw.msgTransporter)
@@ -124,7 +124,7 @@ func (pw *Wrapper) SetRunningStatus(remoteAddr string, respErr string) error {
 	pw.mu.Lock()
 	defer pw.mu.Unlock()
 	if pw.Phase != ProxyPhaseWaitStart {
-		return fmt.Errorf("status not wait start, ignore start message")
+		return fmt.Errorf("状态不是等待开始, 忽略启动消息")
 	}
 
 	pw.RemoteAddr = remoteAddr
@@ -192,7 +192,7 @@ func (pw *Wrapper) checkWorker() {
 				(pw.Phase == ProxyPhaseWaitStart && now.After(pw.lastSendStartMsg.Add(waitResponseTimeout))) ||
 				(pw.Phase == ProxyPhaseStartErr && now.After(pw.lastStartErr.Add(startErrTimeout))) {
 
-				xl.Trace("change status from [%s] to [%s]", pw.Phase, ProxyPhaseWaitStart)
+				xl.Trace("状态从 [%s] 变为 [%s]", pw.Phase, ProxyPhaseWaitStart)
 				pw.Phase = ProxyPhaseWaitStart
 
 				var newProxyMsg msg.NewProxy
@@ -207,7 +207,7 @@ func (pw *Wrapper) checkWorker() {
 			pw.mu.Lock()
 			if pw.Phase == ProxyPhaseRunning || pw.Phase == ProxyPhaseWaitStart {
 				pw.close()
-				xl.Trace("change status from [%s] to [%s]", pw.Phase, ProxyPhaseCheckFailed)
+				xl.Trace("状态从 [%s] 变为 [%s]", pw.Phase, ProxyPhaseCheckFailed)
 				pw.Phase = ProxyPhaseCheckFailed
 			}
 			pw.mu.Unlock()
@@ -231,7 +231,7 @@ func (pw *Wrapper) statusNormalCallback() {
 		default:
 		}
 	})
-	xl.Info("health check success")
+	xl.Info("HealthCheck 成功")
 }
 
 func (pw *Wrapper) statusFailedCallback() {
@@ -243,7 +243,7 @@ func (pw *Wrapper) statusFailedCallback() {
 		default:
 		}
 	})
-	xl.Info("health check failed")
+	xl.Info("HealthCheck 失败")
 }
 
 func (pw *Wrapper) InWorkConn(workConn net.Conn, m *msg.StartWorkConn) {
@@ -252,7 +252,7 @@ func (pw *Wrapper) InWorkConn(workConn net.Conn, m *msg.StartWorkConn) {
 	pxy := pw.pxy
 	pw.mu.RUnlock()
 	if pxy != nil && pw.Phase == ProxyPhaseRunning {
-		xl.Debug("start a new work connection, localAddr: %s remoteAddr: %s", workConn.LocalAddr().String(), workConn.RemoteAddr().String())
+		xl.Debug("开始一个新的工作连接, 本地地址: [%s] 远程地址: [%s]", workConn.LocalAddr().String(), workConn.RemoteAddr().String())
 		go pxy.InWorkConn(workConn, m)
 	} else {
 		workConn.Close()

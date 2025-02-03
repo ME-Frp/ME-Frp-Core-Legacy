@@ -27,21 +27,21 @@ import (
 func init() {
 	RegisterCommonFlags(tcpCmd)
 
-	tcpCmd.PersistentFlags().StringVarP(&proxyName, "proxy_name", "n", "", "proxy name")
-	tcpCmd.PersistentFlags().StringVarP(&localIP, "local_ip", "i", "127.0.0.1", "local ip")
-	tcpCmd.PersistentFlags().IntVarP(&localPort, "local_port", "l", 0, "local port")
-	tcpCmd.PersistentFlags().IntVarP(&remotePort, "remote_port", "r", 0, "remote port")
-	tcpCmd.PersistentFlags().BoolVarP(&useEncryption, "ue", "", false, "use encryption")
-	tcpCmd.PersistentFlags().BoolVarP(&useCompression, "uc", "", false, "use compression")
-	tcpCmd.PersistentFlags().StringVarP(&bandwidthLimit, "bandwidth_limit", "", "", "bandwidth limit")
-	tcpCmd.PersistentFlags().StringVarP(&bandwidthLimitMode, "bandwidth_limit_mode", "", config.BandwidthLimitModeClient, "bandwidth limit mode")
+	tcpCmd.PersistentFlags().StringVarP(&proxyName, "proxy_name", "n", "", "隧道名称")
+	tcpCmd.PersistentFlags().StringVarP(&localIP, "local_ip", "i", "127.0.0.1", "本地 IP")
+	tcpCmd.PersistentFlags().IntVarP(&localPort, "local_port", "l", 0, "本地端口")
+	tcpCmd.PersistentFlags().IntVarP(&remotePort, "remote_port", "r", 0, "远程端口")
+	tcpCmd.PersistentFlags().BoolVarP(&useEncryption, "ue", "", false, "启用加密")
+	tcpCmd.PersistentFlags().BoolVarP(&useCompression, "uc", "", false, "启用压缩")
+	tcpCmd.PersistentFlags().StringVarP(&bandwidthLimit, "bandwidth_limit", "", "", "带宽限制")
+	tcpCmd.PersistentFlags().StringVarP(&bandwidthLimitMode, "bandwidth_limit_mode", "", config.BandwidthLimitModeClient, "带宽限制模式")
 
 	rootCmd.AddCommand(tcpCmd)
 }
 
 var tcpCmd = &cobra.Command{
 	Use:   "tcp",
-	Short: "Run frpc with a single tcp proxy",
+	Short: "启动 [tcp] 隧道",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		clientCfg, err := parseClientCommonCfgFromCmd()
 		if err != nil {

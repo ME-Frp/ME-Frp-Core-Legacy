@@ -1,11 +1,11 @@
 package sub
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
-	"io"
 	"io/fs"
-	"io/ioutil"
 	"net"
 	"net/http"
 	"os"
@@ -27,13 +27,12 @@ import (
 )
 
 var (
-	cfgFile       string
-	cfgDir        string
-	showVersion   bool
-	userToken     string
-	tunnelId      string
-	RemoteContent string
-	_             string
+	cfgFile          string
+	cfgDir           string
+	showVersion      bool
+	strictConfigMode bool
+	userToken        string
+	proxyId          string
 
 	serverAddr      string
 	user            string
@@ -70,12 +69,326 @@ var (
 	tlsServerName string
 )
 
+type ProxyConfigResp struct {
+	ProxyId              int64  `json:"proxyId"`
+	Username             string `json:"username"`
+	ProxyName            string `json:"proxyName"`
+	ProxyType            string `json:"proxyType"`
+	IsBanned             bool   `json:"isBanned"`
+	IsDisabled           bool   `json:"isDisabled"`
+	LocalIp              string `json:"localIp"`
+	LocalPort            int32  `json:"localPort"`
+	RemotePort           int32  `json:"remotePort"`
+	RunId                string `json:"runId"`
+	IsOnline             bool   `json:"isOnline"`
+	Domain               string `json:"domain"`
+	LastStartTime        int64  `json:"lastStartTime"`
+	LastCloseTime        int64  `json:"lastCloseTime"`
+	ClientVersion        string `json:"clientVersion"`
+	ProxyProtocolVersion string `json:"proxyProtocolVersion"`
+	UseEncryption        bool   `json:"useEncryption"`
+	UseCompression       bool   `json:"useCompression"`
+	Location             string `json:"location"`
+	AccessKey            string `json:"accessKey"`
+	HostHeaderRewrite    string `json:"hostHeaderRewrite"`
+	HeaderXFromWhere     string `json:"headerXFromWhere"`
+	NodeAddr             string `json:"nodeAddr"`
+	NodePort             int32  `json:"nodePort"`
+	NodeToken            string `json:"nodeToken"`
+}
+
+type APIResponse struct {
+	Code    int             `json:"code"`
+	Message string          `json:"message"`
+	Data    ProxyConfigResp `json:"data"`
+}
+
 func init() {
-	rootCmd.PersistentFlags().StringVarP(&cfgFile, "config", "c", "", "config file of frpc")
-	rootCmd.PersistentFlags().StringVarP(&cfgDir, "config_dir", "", "", "config directory, run one frpc service for each file in config directory")
-	rootCmd.PersistentFlags().BoolVarP(&showVersion, "version", "v", false, "version of frpc")
-	rootCmd.PersistentFlags().StringVarP(&userToken, "token", "t", "", "You User Token")
-	rootCmd.PersistentFlags().StringVarP(&tunnelId, "tunnelId", "i", "", "Tunnel's ID")
+	rootCmd.PersistentFlags().StringVarP(&cfgFile, "config", "c", "", "ME Frp 客户端配置文件")
+	rootCmd.PersistentFlags().StringVarP(&cfgDir, "config_dir", "", "", "配置目录, 为每个配置文件运行一个 ME Frp 隧道")
+	rootCmd.PersistentFlags().BoolVarP(&showVersion, "version", "v", false, "ME Frp 客户端版本")
+	rootCmd.PersistentFlags().BoolVarP(&strictConfigMode, "strict_config", "", true, "严格配置解析模式, 未知字段将导致错误")
+	rootCmd.PersistentFlags().StringVarP(&userToken, "token", "t", "", "快捷启动的用户 Token")
+	rootCmd.PersistentFlags().StringVarP(&proxyId, "proxy", "p", "", "快捷启动的隧道 Id")
+}
+
+var rootCmd = &cobra.Command{
+	Use:   "mefrpc",
+	Short: "ME Frp 客户端",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		if showVersion {
+			fmt.Println(version.Full())
+			return nil
+		}
+
+		if cfgFile != "" {
+			err := runClient(cfgFile)
+			if err != nil {
+				fmt.Println(err)
+				os.Exit(1)
+			}
+			return nil
+		} else if userToken != "" && proxyId != "" {
+			return runEasyStartup()
+		} else if cfgDir != "" {
+			return runMultipleClients(cfgDir)
+		}
+
+		return fmt.Errorf("请提供配置文件 (-c) 或快捷启动参数 (-t -p)")
+	},
+}
+
+func runMultipleClients(cfgDir string) error {
+	var wg sync.WaitGroup
+	err := filepath.WalkDir(cfgDir, func(path string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return nil
+		}
+		wg.Add(1)
+		time.Sleep(time.Millisecond)
+		go func() {
+			defer wg.Done()
+			err := runClient(path)
+			if err != nil {
+				fmt.Printf("frpc service error for config file [%s]\n", path)
+			}
+		}()
+		return nil
+	})
+	wg.Wait()
+	return err
+}
+
+func runMultipleClientsEasyStart(userToken string, proxyId string) error {
+	var wg sync.WaitGroup
+
+	// 对于多个隧道，我们需要分割它们
+	proxyIdList := strings.Split(proxyId, ",")
+	for _, proxyId := range proxyIdList {
+		wg.Add(1)
+		go func(proxyId string) {
+			defer wg.Done()
+			err := runClient(proxyId)
+			if err != nil {
+				fmt.Printf("frpc service error for config file [%s]\n", proxyId)
+			}
+		}(proxyId)
+	}
+
+	wg.Wait()
+	return nil
+}
+
+func Execute() {
+	if err := rootCmd.Execute(); err != nil {
+		os.Exit(1)
+	}
+}
+
+func handleTermSignal(svr *client.Service) {
+	ch := make(chan os.Signal, 1)
+	signal.Notify(ch, syscall.SIGINT, syscall.SIGTERM)
+	<-ch
+	svr.GracefulClose(500 * time.Millisecond)
+}
+
+func runClient(cfgFilePath string) error {
+	var content string
+	if cfgFilePath != "" {
+		LocalContent, err := config.GetRenderedConfFromFile(cfgFilePath)
+		if err != nil {
+			return err
+		}
+		content = string(LocalContent)
+	} else {
+		return fmt.Errorf("配置文件路径不能为空")
+	}
+
+	cfg, pxyCfgs, visitorCfgs, err := config.ParseClientConfig(content)
+	if err != nil {
+		fmt.Println(err)
+		return err
+	}
+	return startService(cfg, pxyCfgs, visitorCfgs, cfgFilePath)
+}
+
+func startService(
+	cfg config.ClientCommonConf,
+	pxyCfgs map[string]config.ProxyConf,
+	visitorCfgs map[string]config.VisitorConf,
+	cfgFile string,
+) (err error) {
+	log.InitLog(cfg.LogWay, cfg.LogFile, cfg.LogLevel,
+		cfg.LogMaxDays, cfg.DisableLogColor)
+
+	if cfgFile != "" {
+		log.Info("start frpc service for config file [%s]", cfgFile)
+		defer log.Info("frpc service for config file [%s] stopped", cfgFile)
+	}
+	svr, errRet := client.NewService(cfg, pxyCfgs, visitorCfgs, cfgFile)
+	if errRet != nil {
+		err = errRet
+		return
+	}
+
+	// 创建一个 channel 用于接收系统信号
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+
+	// 创建一个 channel 用于等待服务结束
+	doneCh := make(chan error, 1)
+
+	// 在新的 goroutine 中运行服务
+	go func() {
+		if err := svr.Run(context.Background()); err != nil {
+			doneCh <- err
+		}
+	}()
+
+	// 等待信号或服务结束
+	select {
+	case <-sigCh:
+		svr.GracefulClose(500 * time.Millisecond)
+		return nil
+	case err := <-doneCh:
+		return err
+	}
+}
+
+func runEasyStartup() error {
+	if userToken == "" || proxyId == "" {
+		return fmt.Errorf("使用快捷启动时, 用户Token 和 隧道Id 都是必需的")
+	}
+
+	proxyIds := strings.Split(proxyId, ",")
+	var proxies []ProxyConfigResp
+
+	for _, pid := range proxyIds {
+		proxyConfig, err := fetchProxyConfig(pid, userToken)
+		if err != nil {
+			return fmt.Errorf("获取隧道 [%s] 配置失败: %v", pid, err)
+		}
+		proxies = append(proxies, proxyConfig)
+	}
+
+	if len(proxies) == 0 {
+		return fmt.Errorf("没有获取到任何隧道配置")
+	}
+
+	cfg := config.GetDefaultClientConf()
+	cfg.ServerAddr = proxies[0].NodeAddr
+	cfg.ServerPort = int(proxies[0].NodePort)
+	cfg.User = userToken
+	cfg.Token = proxies[0].NodeToken
+	cfg.LogLevel = "info"
+	cfg.LogFile = "console"
+	cfg.LogMaxDays = 3
+
+	pxyCfgs := make(map[string]config.ProxyConf)
+	for _, proxy := range proxies {
+		pxyCfg := createProxyConfig(&proxy)
+		if pxyCfg == nil {
+			return fmt.Errorf("不支持的隧道类型: %s (支持的类型: tcp, http, https)", proxy.ProxyType)
+		}
+		pxyCfgs[proxy.ProxyName] = pxyCfg
+	}
+
+	return startService(cfg, pxyCfgs, nil, "")
+}
+
+func createProxyConfig(proxy *ProxyConfigResp) config.ProxyConf {
+	var pxyCfg config.ProxyConf
+
+	switch proxy.ProxyType {
+	case "tcp":
+		cfg := &config.TCPProxyConf{}
+		cfg.ProxyName = proxy.ProxyName
+		cfg.ProxyType = "tcp"
+		cfg.LocalIP = proxy.LocalIp
+		cfg.LocalPort = int(proxy.LocalPort)
+		cfg.RemotePort = int(proxy.RemotePort)
+		cfg.UseEncryption = proxy.UseEncryption
+		cfg.UseCompression = proxy.UseCompression
+		pxyCfg = cfg
+	case "http":
+		cfg := &config.HTTPProxyConf{}
+		cfg.ProxyName = proxy.ProxyName
+		cfg.ProxyType = "http"
+		cfg.LocalIP = proxy.LocalIp
+		cfg.LocalPort = int(proxy.LocalPort)
+		cfg.CustomDomains = []string{proxy.Domain}
+		cfg.HostHeaderRewrite = proxy.HostHeaderRewrite
+		cfg.Headers = map[string]string{
+			"X-From-Where": proxy.HeaderXFromWhere,
+		}
+		cfg.UseEncryption = proxy.UseEncryption
+		cfg.UseCompression = proxy.UseCompression
+		pxyCfg = cfg
+	case "https":
+		cfg := &config.HTTPSProxyConf{}
+		cfg.ProxyName = proxy.ProxyName
+		cfg.ProxyType = "https"
+		cfg.LocalIP = proxy.LocalIp
+		cfg.LocalPort = int(proxy.LocalPort)
+		cfg.CustomDomains = []string{proxy.Domain}
+		cfg.UseEncryption = proxy.UseEncryption
+		cfg.UseCompression = proxy.UseCompression
+		pxyCfg = cfg
+	default:
+		return nil
+	}
+
+	return pxyCfg
+}
+
+func fetchProxyConfig(proxyId string, userToken string) (ProxyConfigResp, error) {
+	url := "https://mefrp-preview-api.lxhtt.cn/api/auth/easyStartup"
+	jsonBody := []byte(fmt.Sprintf(`{"proxyId": %s}`, proxyId))
+	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonBody))
+	if err != nil {
+		return ProxyConfigResp{}, fmt.Errorf("创建请求失败: %v", err)
+	}
+
+	req.Header.Set("Authorization", "Bearer "+userToken)
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return ProxyConfigResp{}, fmt.Errorf("发送请求失败: %v", err)
+	}
+	defer resp.Body.Close()
+
+	var proxyResp APIResponse
+	if err := json.NewDecoder(resp.Body).Decode(&proxyResp); err != nil {
+		return ProxyConfigResp{}, fmt.Errorf("解析响应失败: %v", err)
+	}
+
+	if proxyResp.Code != 200 {
+		return ProxyConfigResp{}, fmt.Errorf("API 错误: %s", proxyResp.Message)
+	}
+
+	if proxyResp.Data.IsBanned {
+		return ProxyConfigResp{}, fmt.Errorf("隧道已被封禁, 请联系管理员")
+	}
+
+	if proxyResp.Data.IsDisabled {
+		return ProxyConfigResp{}, fmt.Errorf("隧道已被禁用, 请在网页端启用")
+	}
+
+	if proxyResp.Data.ProxyType == "" {
+		return ProxyConfigResp{}, fmt.Errorf("隧道类型为空, 请检查隧道是否存在")
+	}
+
+	if proxyResp.Data.NodeAddr == "" {
+		return ProxyConfigResp{}, fmt.Errorf("API 返回的节点地址为空")
+	}
+
+	if proxyResp.Data.NodePort == 0 {
+		return ProxyConfigResp{}, fmt.Errorf("API 返回的节点端口为空")
+	}
+
+	return proxyResp.Data, nil
 }
 
 func RegisterCommonFlags(cmd *cobra.Command) {
@@ -90,144 +403,6 @@ func RegisterCommonFlags(cmd *cobra.Command) {
 	cmd.PersistentFlags().BoolVarP(&tlsEnable, "tls_enable", "", true, "enable frpc tls")
 	cmd.PersistentFlags().StringVarP(&tlsServerName, "tls_server_name", "", "", "specify the custom server name of tls certificate")
 	cmd.PersistentFlags().StringVarP(&dnsServer, "dns_server", "", "", "specify dns server instead of using system default one")
-}
-func EasyStartGetConf(token string, tunnelId string) {
-	req, err := http.NewRequest("GET", "https://api.mefrp.com/api/v2/tunnel/conf/id/"+tunnelId, nil)
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-
-	req.Header.Set("Authorization", "Bearer "+token)
-
-	c := &http.Client{}
-
-	response, err := c.Do(req)
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-	if response.StatusCode != http.StatusOK {
-		err = fmt.Errorf("ME Frp API 校验失败 可能是您的启动信息错误%d", response.StatusCode)
-		bodyBytes, err := ioutil.ReadAll(response.Body)
-		if err != nil {
-			fmt.Println(err)
-			return
-		}
-		fmt.Println(string(bodyBytes))
-		fmt.Println(err)
-		os.Exit(1)
-		return
-	}
-	defer func(Body io.ReadCloser) {
-		err := Body.Close()
-		if err != nil {
-			fmt.Println(err)
-		}
-	}(response.Body)
-
-	data, err := io.ReadAll(response.Body)
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-	fmt.Println("获取配置文件成功！ 启动隧道")
-	Content := string(data)
-	RemoteContent = Content
-	return
-}
-
-var rootCmd = &cobra.Command{
-	Use:   "frpc",
-	Short: "The Frp Client of ME Frp",
-	RunE: func(cmd *cobra.Command, args []string) error {
-		if showVersion {
-			fmt.Println(version.Full())
-			return nil
-		}
-
-		if cfgFile == "" && cfgDir == "" && (userToken == "" || tunnelId == "") {
-			fmt.Println("启动参数不存在或不完整！ 无法正常使用 EasyStartSingle/Multi 以及 LocalConfigSingle/Multi 启动,即将尝试通过 ./frpc.ini 文件启动。")
-			cfgFile = "./frpc.ini"
-		}
-
-		// 多隧道启动部分
-
-		// If cfgDir is not empty, run multiple frpc service for each config file in cfgDir.
-		// Note that it's only designed for testing. It's not guaranteed to be stable.
-		if cfgDir != "" {
-			// 使用配置文件夹启动
-			fmt.Println("使用配置文件夹启动")
-			_ = runMultipleClients(cfgDir)
-			return nil
-		}
-		// 如果 tunnelId 后面跟了多个数字，那么就是多个隧道
-		if strings.Contains(tunnelId, ",") {
-			fmt.Println("检测到多个隧道，正在启动多个隧道")
-			fmt.Printf(tunnelId)
-			_ = runMultipleClientsEasyStart(userToken, tunnelId)
-		} else {
-			// 多隧道不行就单隧道
-			err := runClient(cfgFile, userToken, tunnelId)
-			if err != nil {
-				os.Exit(1)
-			}
-		}
-		return nil
-	},
-}
-
-func runMultipleClients(cfgDir string) error {
-	var wg sync.WaitGroup
-	err := filepath.WalkDir(cfgDir, func(path string, d fs.DirEntry, err error) error {
-		if err != nil || d.IsDir() {
-			return nil
-		}
-		wg.Add(1)
-		time.Sleep(time.Millisecond)
-		go func() {
-			defer wg.Done()
-			err := runClient(path, "", "")
-			if err != nil {
-				fmt.Printf("frpc service error for config file [%s]\n", path)
-			}
-		}()
-		return nil
-	})
-	wg.Wait()
-	return err
-}
-
-func runMultipleClientsEasyStart(userToken string, tunnelId string) error {
-	var wg sync.WaitGroup
-
-	// 对于多个隧道，我们需要分割它们
-	tunnelIdList := strings.Split(tunnelId, ",")
-	for _, tunnelId := range tunnelIdList {
-		wg.Add(1)
-		go func(tunnelId string) {
-			defer wg.Done()
-			err := runClient("", userToken, tunnelId)
-			if err != nil {
-				fmt.Printf("frpc service error for config file [%s]\n", tunnelId)
-			}
-		}(tunnelId)
-	}
-
-	wg.Wait()
-	return nil
-}
-func Execute() {
-	if err := rootCmd.Execute(); err != nil {
-		os.Exit(1)
-	}
-}
-
-func handleTermSignal(svr *client.Service) {
-	ch := make(chan os.Signal, 1)
-	signal.Notify(ch, syscall.SIGINT, syscall.SIGTERM)
-	<-ch
-	svr.GracefulClose(500 * time.Millisecond)
 }
 
 func parseClientCommonCfgFromCmd() (cfg config.ClientCommonConf, err error) {
@@ -265,54 +440,5 @@ func parseClientCommonCfgFromCmd() (cfg config.ClientCommonConf, err error) {
 		err = fmt.Errorf("parse config error: %v", err)
 		return
 	}
-	return
-}
-
-func runClient(cfgFilePath string, userToken string, tunnelId string) error {
-	var content string
-	if cfgFilePath != "" {
-		LocalContent, err := config.GetRenderedConfFromFile(cfgFile)
-		if err != nil {
-			return err
-		}
-		content = string(LocalContent)
-	} else {
-		EasyStartGetConf(userToken, tunnelId)
-		content = RemoteContent
-	}
-	cfg, pxyCfgs, visitorCfgs, err := config.ParseClientConfig(content)
-	if err != nil {
-		fmt.Println(err)
-		return err
-	}
-	return startService(cfg, pxyCfgs, visitorCfgs, cfgFilePath)
-}
-
-func startService(
-	cfg config.ClientCommonConf,
-	pxyCfgs map[string]config.ProxyConf,
-	visitorCfgs map[string]config.VisitorConf,
-	cfgFile string,
-) (err error) {
-	log.InitLog(cfg.LogWay, cfg.LogFile, cfg.LogLevel,
-		cfg.LogMaxDays, cfg.DisableLogColor)
-
-	if cfgFile != "" {
-		log.Info("start frpc service for config file [%s]", cfgFile)
-		defer log.Info("frpc service for config file [%s] stopped", cfgFile)
-	}
-	svr, errRet := client.NewService(cfg, pxyCfgs, visitorCfgs, cfgFile)
-	if errRet != nil {
-		err = errRet
-		return
-	}
-
-	shouldGracefulClose := cfg.Protocol == "kcp" || cfg.Protocol == "quic"
-	// Capture the exit signal if we use kcp or quic.
-	if shouldGracefulClose {
-		go handleTermSignal(svr)
-	}
-
-	_ = svr.Run(context.Background())
 	return
 }

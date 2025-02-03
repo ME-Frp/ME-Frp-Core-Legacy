@@ -28,23 +28,23 @@ import (
 func init() {
 	RegisterCommonFlags(tcpMuxCmd)
 
-	tcpMuxCmd.PersistentFlags().StringVarP(&proxyName, "proxy_name", "n", "", "proxy name")
-	tcpMuxCmd.PersistentFlags().StringVarP(&localIP, "local_ip", "i", "127.0.0.1", "local ip")
-	tcpMuxCmd.PersistentFlags().IntVarP(&localPort, "local_port", "l", 0, "local port")
-	tcpMuxCmd.PersistentFlags().StringVarP(&customDomains, "custom_domain", "d", "", "custom domain")
-	tcpMuxCmd.PersistentFlags().StringVarP(&subDomain, "sd", "", "", "sub domain")
-	tcpMuxCmd.PersistentFlags().StringVarP(&multiplexer, "mux", "", "", "multiplexer")
-	tcpMuxCmd.PersistentFlags().BoolVarP(&useEncryption, "ue", "", false, "use encryption")
-	tcpMuxCmd.PersistentFlags().BoolVarP(&useCompression, "uc", "", false, "use compression")
-	tcpMuxCmd.PersistentFlags().StringVarP(&bandwidthLimit, "bandwidth_limit", "", "", "bandwidth limit")
-	tcpMuxCmd.PersistentFlags().StringVarP(&bandwidthLimitMode, "bandwidth_limit_mode", "", config.BandwidthLimitModeClient, "bandwidth limit mode")
+	tcpMuxCmd.PersistentFlags().StringVarP(&proxyName, "proxy_name", "n", "", "隧道名称")
+	tcpMuxCmd.PersistentFlags().StringVarP(&localIP, "local_ip", "i", "127.0.0.1", "本地 IP")
+	tcpMuxCmd.PersistentFlags().IntVarP(&localPort, "local_port", "l", 0, "本地端口")
+	tcpMuxCmd.PersistentFlags().StringVarP(&customDomains, "custom_domain", "d", "", "自定义域名")
+	tcpMuxCmd.PersistentFlags().StringVarP(&subDomain, "sd", "", "", "子域名")
+	tcpMuxCmd.PersistentFlags().StringVarP(&multiplexer, "mux", "", "", "多路复用器")
+	tcpMuxCmd.PersistentFlags().BoolVarP(&useEncryption, "ue", "", false, "启用加密")
+	tcpMuxCmd.PersistentFlags().BoolVarP(&useCompression, "uc", "", false, "启用压缩")
+	tcpMuxCmd.PersistentFlags().StringVarP(&bandwidthLimit, "bandwidth_limit", "", "", "带宽限制")
+	tcpMuxCmd.PersistentFlags().StringVarP(&bandwidthLimitMode, "bandwidth_limit_mode", "", config.BandwidthLimitModeClient, "带宽限制模式")
 
 	rootCmd.AddCommand(tcpMuxCmd)
 }
 
 var tcpMuxCmd = &cobra.Command{
 	Use:   "tcpmux",
-	Short: "Run frpc with a single tcpmux proxy",
+	Short: "启动 [tcpmux] 隧道",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		clientCfg, err := parseClientCommonCfgFromCmd()
 		if err != nil {

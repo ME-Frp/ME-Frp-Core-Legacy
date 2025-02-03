@@ -26,7 +26,7 @@ import (
 	"github.com/fatedier/frp/pkg/util/xlog"
 )
 
-var ErrHealthCheckType = errors.New("error health check type")
+var ErrHealthCheckType = errors.New("错误的 HealthCheck 类型")
 
 type Monitor struct {
 	checkType      string
@@ -103,17 +103,17 @@ func (monitor *Monitor) checkWorker() {
 		}
 
 		if err == nil {
-			xl.Trace("do one health check success")
+			xl.Trace("执行一次 HealthCheck 成功")
 			if !monitor.statusOK && monitor.statusNormalFn != nil {
-				xl.Info("health check status change to success")
+				xl.Info("HealthCheck 状态变为成功")
 				monitor.statusOK = true
 				monitor.statusNormalFn()
 			}
 		} else {
-			xl.Warn("do one health check failed: %v", err)
+			xl.Warn("执行一次 HealthCheck 失败: %v", err)
 			monitor.failedTimes++
 			if monitor.statusOK && int(monitor.failedTimes) >= monitor.maxFailedTimes && monitor.statusFailedFn != nil {
-				xl.Warn("health check status change to failed")
+				xl.Warn("HealthCheck 状态变为失败")
 				monitor.statusOK = false
 				monitor.statusFailedFn()
 			}
@@ -162,7 +162,7 @@ func (monitor *Monitor) doHTTPCheck(ctx context.Context) error {
 	_, _ = io.Copy(io.Discard, resp.Body)
 
 	if resp.StatusCode/100 != 2 {
-		return fmt.Errorf("do http health check, StatusCode is [%d] not 2xx", resp.StatusCode)
+		return fmt.Errorf("执行 HTTP HealthCheck, 状态码为 [%d] 不是 2xx", resp.StatusCode)
 	}
 	return nil
 }

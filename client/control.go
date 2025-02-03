@@ -16,6 +16,7 @@ package client
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"net"
 	"runtime/debug"
@@ -128,7 +129,7 @@ func (ctl *Control) HandleReqWorkConn(_ *msg.ReqWorkConn) {
 	xl := ctl.xl
 	workConn, err := ctl.connectServer()
 	if err != nil {
-		xl.Warn("start new connection to server error: %v", err)
+		xl.Warn("启动新连接到服务器失败: %v", err)
 		return
 	}
 
@@ -136,23 +137,23 @@ func (ctl *Control) HandleReqWorkConn(_ *msg.ReqWorkConn) {
 		RunID: ctl.runID,
 	}
 	if err = ctl.authSetter.SetNewWorkConn(m); err != nil {
-		xl.Warn("error during NewWorkConn authentication: %v", err)
+		xl.Warn("NewWorkConn 认证失败: %v", err)
 		return
 	}
 	if err = msg.WriteMsg(workConn, m); err != nil {
-		xl.Warn("work connection write to server error: %v", err)
+		xl.Warn("工作连接写入服务器失败: %v", err)
 		workConn.Close()
 		return
 	}
 
 	var startMsg msg.StartWorkConn
 	if err = msg.ReadMsgInto(workConn, &startMsg); err != nil {
-		xl.Trace("work connection closed before response StartWorkConn message: %v", err)
+		xl.Trace("工作连接在响应 StartWorkConn 消息之前关闭: %v", err)
 		workConn.Close()
 		return
 	}
 	if startMsg.Error != "" {
-		xl.Error("StartWorkConn contains error: %s", startMsg.Error)
+		xl.Error("StartWorkConn 包含错误: %s", startMsg.Error)
 		workConn.Close()
 		return
 	}
@@ -167,9 +168,22 @@ func (ctl *Control) HandleNewProxyResp(inMsg *msg.NewProxyResp) {
 	// Start a new proxy handler if no error got
 	err := ctl.pm.StartProxy(inMsg.ProxyName, inMsg.RemoteAddr, inMsg.Error)
 	if err != nil {
-		xl.Warn("[%s] start error: %v", inMsg.ProxyName, err)
+		xl.Warn("启动隧道 [%s] 失败: %v", inMsg.ProxyName, err)
 	} else {
-		xl.Info("[%s] start proxy success", inMsg.ProxyName)
+		cfg, ok := ctl.pxyCfgs[inMsg.ProxyName]
+		if !ok {
+			xl.Warn("内部错误：隧道 [%s] 未找到, 您可以继续使用本隧道", inMsg.ProxyName)
+			return
+		}
+		proxyAddr := inMsg.RemoteAddr
+		// 如果不是 http/https 类型，需要加上服务器地址
+		if cfg.GetBaseConfig().ProxyType != "http" && cfg.GetBaseConfig().ProxyType != "https" {
+			proxyAddr = fmt.Sprintf("%s:%s", ctl.clientCfg.ServerAddr, inMsg.RemoteAddr)
+		}
+		xl.Info("启动 [%s] 隧道 [%s] 成功, 您可以使用 [%s] 访问您的服务",
+			cfg.GetBaseConfig().ProxyType,
+			inMsg.ProxyName,
+			proxyAddr)
 	}
 }
 
@@ -179,8 +193,27 @@ func (ctl *Control) HandleNatHoleResp(inMsg *msg.NatHoleResp) {
 	// Dispatch the NatHoleResp message to the related proxy.
 	ok := ctl.msgTransporter.DispatchWithType(inMsg, msg.TypeNameNatHoleResp, inMsg.TransactionID)
 	if !ok {
-		xl.Trace("dispatch NatHoleResp message to related proxy error")
+		xl.Trace("分发 NatHoleResp 消息到相关隧道错误")
 	}
+}
+
+func (ctl *Control) handleGetProxyBandwidthLimitResp(m *msg.GetProxyBandwidthLimitResp) {
+	xl := ctl.xl
+	xl.Info("隧道 [%s] 带宽限制: %d Mbps ↑ , %d Mbps ↓", m.ProxyName, m.OutBound, m.InBound)
+	cfg, ok := ctl.pxyCfgs[m.ProxyName]
+	if !ok {
+		xl.Warn("内部错误：隧道 [%s] 未找到, 您可以继续使用", m.ProxyName)
+		return
+	}
+
+	var limit int64
+	if m.InBound > 0 {
+		limit = m.InBound
+	} else {
+		limit = m.OutBound
+	}
+	baseCfg := cfg.GetBaseConfig()
+	_ = baseCfg.BandwidthLimit.UnmarshalString(fmt.Sprintf("%dMB", limit))
 }
 
 func (ctl *Control) Close() error {
@@ -225,10 +258,10 @@ func (ctl *Control) reader() {
 		m, err := msg.ReadMsg(encReader)
 		if err != nil {
 			if err == io.EOF {
-				xl.Debug("read from control connection EOF")
+				xl.Debug("控制连接读取到 EOF")
 				return
 			}
-			xl.Warn("read error: %v", err)
+			xl.Warn("读取失败: %v", err)
 			ctl.conn.Close()
 			return
 		}
@@ -242,19 +275,19 @@ func (ctl *Control) writer() {
 	defer ctl.writerShutdown.Done()
 	encWriter, err := crypto.NewWriter(ctl.conn, []byte(ctl.clientCfg.Token))
 	if err != nil {
-		xl.Error("crypto new writer error: %v", err)
+		xl.Error("加密新的写入器失败: %v", err)
 		ctl.conn.Close()
 		return
 	}
 	for {
 		m, ok := <-ctl.sendCh
 		if !ok {
-			xl.Info("control writer is closing")
+			xl.Info("控制写入器正在关闭")
 			return
 		}
 
 		if err := msg.WriteMsg(encWriter, m); err != nil {
-			xl.Warn("write message to control connection error: %v", err)
+			xl.Warn("向控制连接写入消息失败: %v", err)
 			return
 		}
 	}
@@ -293,16 +326,16 @@ func (ctl *Control) msgHandler() {
 		select {
 		case <-hbSendCh:
 			// send heartbeat to server
-			xl.Debug("send heartbeat to server")
+			xl.Debug("发送心跳到服务器")
 			pingMsg := &msg.Ping{}
 			if err := ctl.authSetter.SetPing(pingMsg); err != nil {
-				xl.Warn("error during ping authentication: %v", err)
+				xl.Warn("Ping 认证失败: %v", err)
 				return
 			}
 			ctl.sendCh <- pingMsg
 		case <-hbCheckCh:
 			if time.Since(ctl.lastPong) > time.Duration(ctl.clientCfg.HeartbeatTimeout)*time.Second {
-				xl.Warn("heartbeat timeout")
+				xl.Warn("心跳超时")
 				// let reader() stop
 				ctl.conn.Close()
 				return
@@ -319,14 +352,16 @@ func (ctl *Control) msgHandler() {
 				ctl.HandleNewProxyResp(m)
 			case *msg.NatHoleResp:
 				ctl.HandleNatHoleResp(m)
+			case *msg.GetProxyBandwidthLimitResp:
+				ctl.handleGetProxyBandwidthLimitResp(m)
 			case *msg.Pong:
 				if m.Error != "" {
-					xl.Error("Pong contains error: %s", m.Error)
+					xl.Error("Pong 包含错误: %s", m.Error)
 					ctl.conn.Close()
 					return
 				}
 				ctl.lastPong = time.Now()
-				xl.Debug("receive heartbeat from server")
+				xl.Debug("收到服务器心跳")
 			}
 		}
 	}

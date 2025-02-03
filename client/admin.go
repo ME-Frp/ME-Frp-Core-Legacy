@@ -14,72 +14,64 @@
 
 package client
 
-import (
-	"net"
-	"net/http"
-	"net/http/pprof"
-	"time"
+// import (
+// "time"
+// )
 
-	"github.com/gorilla/mux"
+// var (
+// 	httpServerReadTimeout  = 60 * time.Second
+// 	httpServerWriteTimeout = 60 * time.Second
+// )
 
-	"github.com/fatedier/frp/assets"
-	utilnet "github.com/fatedier/frp/pkg/util/net"
-)
+// func (svr *Service) RunAdminServer(address string) (err error) {
+// 	// url router
+// 	router := mux.NewRouter()
 
-var (
-	httpServerReadTimeout  = 60 * time.Second
-	httpServerWriteTimeout = 60 * time.Second
-)
+// 	router.HandleFunc("/healthz", svr.healthz)
 
-func (svr *Service) RunAdminServer(address string) (err error) {
-	// url router
-	router := mux.NewRouter()
+// 	// debug
+// 	if svr.cfg.PprofEnable {
+// 		router.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
+// 		router.HandleFunc("/debug/pprof/profile", pprof.Profile)
+// 		router.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
+// 		router.HandleFunc("/debug/pprof/trace", pprof.Trace)
+// 		router.PathPrefix("/debug/pprof/").HandlerFunc(pprof.Index)
+// 	}
 
-	router.HandleFunc("/healthz", svr.healthz)
+// 	subRouter := router.NewRoute().Subrouter()
+// 	user, passwd := svr.cfg.AdminUser, svr.cfg.AdminPwd
+// 	subRouter.Use(utilnet.NewHTTPAuthMiddleware(user, passwd).SetAuthFailDelay(200 * time.Millisecond).Middleware)
 
-	// debug
-	if svr.cfg.PprofEnable {
-		router.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
-		router.HandleFunc("/debug/pprof/profile", pprof.Profile)
-		router.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
-		router.HandleFunc("/debug/pprof/trace", pprof.Trace)
-		router.PathPrefix("/debug/pprof/").HandlerFunc(pprof.Index)
-	}
+// 	// api, see admin_api.go
+// 	subRouter.HandleFunc("/api/reload", svr.apiReload).Methods("GET")
+// 	subRouter.HandleFunc("/api/stop", svr.apiStop).Methods("POST")
+// 	subRouter.HandleFunc("/api/status", svr.apiStatus).Methods("GET")
+// 	subRouter.HandleFunc("/api/config", svr.apiGetConfig).Methods("GET")
+// 	subRouter.HandleFunc("/api/config", svr.apiPutConfig).Methods("PUT")
 
-	subRouter := router.NewRoute().Subrouter()
-	user, passwd := svr.cfg.AdminUser, svr.cfg.AdminPwd
-	subRouter.Use(utilnet.NewHTTPAuthMiddleware(user, passwd).SetAuthFailDelay(200 * time.Millisecond).Middleware)
+// 	// view
+// 	subRouter.Handle("/favicon.ico", http.FileServer(assets.FileSystem)).Methods("GET")
+// 	subRouter.PathPrefix("/static/").Handler(utilnet.MakeHTTPGzipHandler(http.StripPrefix("/static/", http.FileServer(assets.FileSystem)))).Methods("GET")
+// 	subRouter.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+// 		http.Redirect(w, r, "/static/", http.StatusMovedPermanently)
+// 	})
 
-	// api, see admin_api.go
-	subRouter.HandleFunc("/api/reload", svr.apiReload).Methods("GET")
-	subRouter.HandleFunc("/api/stop", svr.apiStop).Methods("POST")
-	subRouter.HandleFunc("/api/status", svr.apiStatus).Methods("GET")
-	subRouter.HandleFunc("/api/config", svr.apiGetConfig).Methods("GET")
-	subRouter.HandleFunc("/api/config", svr.apiPutConfig).Methods("PUT")
+// 	server := &http.Server{
+// 		Addr:         address,
+// 		Handler:      router,
+// 		ReadTimeout:  httpServerReadTimeout,
+// 		WriteTimeout: httpServerWriteTimeout,
+// 	}
+// 	if address == "" {
+// 		address = ":http"
+// 	}
+// 	ln, err := net.Listen("tcp", address)
+// 	if err != nil {
+// 		return err
+// 	}
 
-	// view
-	subRouter.Handle("/favicon.ico", http.FileServer(assets.FileSystem)).Methods("GET")
-	subRouter.PathPrefix("/static/").Handler(utilnet.MakeHTTPGzipHandler(http.StripPrefix("/static/", http.FileServer(assets.FileSystem)))).Methods("GET")
-	subRouter.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		http.Redirect(w, r, "/static/", http.StatusMovedPermanently)
-	})
-
-	server := &http.Server{
-		Addr:         address,
-		Handler:      router,
-		ReadTimeout:  httpServerReadTimeout,
-		WriteTimeout: httpServerWriteTimeout,
-	}
-	if address == "" {
-		address = ":http"
-	}
-	ln, err := net.Listen("tcp", address)
-	if err != nil {
-		return err
-	}
-
-	go func() {
-		_ = server.Serve(ln)
-	}()
-	return
-}
+// 	go func() {
+// 		_ = server.Serve(ln)
+// 	}()
+// 	return
+// }

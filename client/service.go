@@ -19,7 +19,6 @@ import (
 	"crypto/tls"
 	"fmt"
 	"io"
-	"math/rand"
 	"net"
 	"runtime"
 	"strconv"
@@ -33,12 +32,10 @@ import (
 	fmux "github.com/hashicorp/yamux"
 	quic "github.com/quic-go/quic-go"
 
-	"github.com/fatedier/frp/assets"
 	"github.com/fatedier/frp/pkg/auth"
 	"github.com/fatedier/frp/pkg/config"
 	"github.com/fatedier/frp/pkg/msg"
 	"github.com/fatedier/frp/pkg/transport"
-	"github.com/fatedier/frp/pkg/util/log"
 	utilnet "github.com/fatedier/frp/pkg/util/net"
 	"github.com/fatedier/frp/pkg/util/util"
 	"github.com/fatedier/frp/pkg/util/version"
@@ -47,8 +44,6 @@ import (
 
 func init() {
 	crypto.DefaultSalt = "frp"
-	// TODO: remove this when we drop support for go1.19
-	rand.Seed(time.Now().UnixNano())
 }
 
 // Service is a client service.
@@ -130,12 +125,12 @@ func (svr *Service) Run(ctx context.Context) error {
 	for {
 		conn, cm, err := svr.login()
 		if err != nil {
-			xl.Warn("login to server failed: %v", err)
+			xl.Warn("登录节点失败: %v", err)
 
 			// if login_fail_exit is true, just exit this program
 			// otherwise sleep a while and try again to connect to server
 			if svr.cfg.LoginFailExit {
-				return err
+				return fmt.Errorf("登录节点失败: %v; 启用 loginFailExit 后, 将不再尝试重试", err)
 			}
 			util.RandomSleep(5*time.Second, 0.9, 1.1)
 		} else {
@@ -151,22 +146,22 @@ func (svr *Service) Run(ctx context.Context) error {
 
 	go svr.keepControllerWorking()
 
-	if svr.cfg.AdminPort != 0 {
-		// Init admin server assets
-		assets.Load(svr.cfg.AssetsDir)
+	// if svr.cfg.AdminPort != 0 {
+	// 	// Init admin server assets
+	// 	assets.Load(svr.cfg.AssetsDir)
 
-		address := net.JoinHostPort(svr.cfg.AdminAddr, strconv.Itoa(svr.cfg.AdminPort))
-		err := svr.RunAdminServer(address)
-		if err != nil {
-			log.Warn("run admin server error: %v", err)
-		}
-		log.Info("admin server listen on %s:%d", svr.cfg.AdminAddr, svr.cfg.AdminPort)
-	}
-	<-svr.ctx.Done()
-	// service context may not be canceled by svr.Close(), we should call it here to release resources
-	if atomic.LoadUint32(&svr.exit) == 0 {
-		svr.Close()
-	}
+	// 	address := net.JoinHostPort(svr.cfg.AdminAddr, strconv.Itoa(svr.cfg.AdminPort))
+	// 	err := svr.RunAdminServer(address)
+	// 	if err != nil {
+	// 		log.Warn("run admin server error: %v", err)
+	// 	}
+	// 	log.Info("admin server listen on %s:%d", svr.cfg.AdminAddr, svr.cfg.AdminPort)
+	// }
+	// <-svr.ctx.Done()
+	// // service context may not be canceled by svr.Close(), we should call it here to release resources
+	// if atomic.LoadUint32(&svr.exit) == 0 {
+	// 	svr.Close()
+	// }
 	return nil
 }
 
@@ -191,7 +186,7 @@ func (svr *Service) keepControllerWorking() {
 		// the first three attempts with a low delay
 		if reconnectCounts > 3 {
 			util.RandomSleep(reconnectDelay, 0.9, 1.1)
-			xl.Info("wait %v to reconnect", reconnectDelay)
+			xl.Info("等待 %v 秒后重连", reconnectDelay)
 			reconnectDelay *= 2
 		} else {
 			util.RandomSleep(time.Second, 0, 0.5)
@@ -211,10 +206,10 @@ func (svr *Service) keepControllerWorking() {
 				return
 			}
 
-			xl.Info("try to reconnect to server...")
+			xl.Info("与节点断开连接, 尝试重新连接...")
 			conn, cm, err := svr.login()
 			if err != nil {
-				xl.Warn("reconnect to server error: %v, wait %v for another retry", err, delayTime)
+				xl.Warn("重连节点失败: %v, 等待 %v 秒后重试", err, delayTime)
 				util.RandomSleep(delayTime, 0.9, 1.1)
 
 				delayTime *= 2
@@ -298,7 +293,7 @@ func (svr *Service) login() (conn net.Conn, cm *ConnectionManager, err error) {
 	xl.ResetPrefixes()
 	xl.AppendPrefix(svr.runID)
 
-	xl.Info("login to server success, get run id [%s]", loginRespMsg.RunID)
+	xl.Info("登录节点成功, RunId: [%s]", loginRespMsg.RunID)
 	return
 }
 
@@ -373,7 +368,7 @@ func (cm *ConnectionManager) OpenConnection() error {
 			tlsConfig, err = transport.NewClientTLSConfig("", "", "", sn)
 		}
 		if err != nil {
-			xl.Warn("fail to build tls configuration, err: %v", err)
+			xl.Warn("创建 TLS 配置失败: %v", err)
 			return err
 		}
 		tlsConfig.NextProtos = []string{"frp"}
@@ -452,14 +447,14 @@ func (cm *ConnectionManager) realConnect() (net.Conn, error) {
 			cm.cfg.TLSTrustedCaFile,
 			sn)
 		if err != nil {
-			xl.Warn("fail to build tls configuration, err: %v", err)
+			xl.Warn("创建 TLS 配置失败: %v", err)
 			return nil, err
 		}
 	}
 
 	proxyType, addr, auth, err := libdial.ParseProxyURL(cm.cfg.HTTPProxy)
 	if err != nil {
-		xl.Error("fail to parse proxy url")
+		xl.Error("解析隧道 URL 失败: %v", err)
 		return nil, err
 	}
 	dialOptions := []libdial.DialOption{}
