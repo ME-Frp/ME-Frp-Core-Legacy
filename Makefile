@@ -4,7 +4,7 @@ LDFLAGS := -s -w
 
 all: env fmt build
 
-build: frps frpc
+build: frpc
 
 env:
 	@go version
