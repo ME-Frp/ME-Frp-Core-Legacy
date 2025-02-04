@@ -1,17 +1,13 @@
-export PATH := $(GOPATH)/bin:$(PATH)
+export PATH := $(PATH):`go env GOPATH`/bin
 export GO111MODULE=on
 LDFLAGS := -s -w
 
-all: fmt build
+all: env fmt build
 
-build: frps frpc
+build: frpc
 
-# compile assets into binary file
-file:
-	rm -rf ./assets/frps/static/*
-	rm -rf ./assets/frpc/static/*
-	cp -rf ./web/frps/dist/* ./assets/frps/static
-	cp -rf ./web/frpc/dist/* ./assets/frpc/static
+env:
+	@go version
 
 fmt:
 	go fmt ./...
@@ -25,11 +21,8 @@ gci:
 vet:
 	go vet ./...
 
-frps:
-	env CGO_ENABLED=0 go build -trimpath -ldflags "$(LDFLAGS)" -o bin/frps ./cmd/frps
-
 frpc:
-	env CGO_ENABLED=0 go build -trimpath -ldflags "$(LDFLAGS)" -o bin/frpc ./cmd/frpc
+	env CGO_ENABLED=0 go build -trimpath -ldflags "$(LDFLAGS)" -tags frpc -o bin/mefrpc ./cmd/frpc
 
 test: gotest
 
@@ -53,16 +46,8 @@ e2e-compatibility-last-frpc:
 	FRPC_PATH="`pwd`/lastversion/frpc" ./hack/run-e2e.sh
 	rm -r ./lastversion
 
-e2e-compatibility-last-frps:
-	if [ ! -d "./lastversion" ]; then \
-		TARGET_DIRNAME=lastversion ./hack/download.sh; \
-	fi
-	FRPS_PATH="`pwd`/lastversion/frps" ./hack/run-e2e.sh
-	rm -r ./lastversion
-
 alltest: vet gotest e2e
 	
 clean:
 	rm -f ./bin/frpc
-	rm -f ./bin/frps
 	rm -rf ./lastversion

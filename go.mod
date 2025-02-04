@@ -2,8 +2,6 @@ module github.com/fatedier/frp
 
 go 1.20
 
-toolchain go1.21.8
-
 require (
 	github.com/armon/go-socks5 v0.0.0-20160902184237-e75332964ef5
 	github.com/coreos/go-oidc/v3 v3.6.0
@@ -17,7 +15,6 @@ require (
 	github.com/pires/go-proxyproto v0.7.0
 	github.com/prometheus/client_golang v1.16.0
 	github.com/quic-go/quic-go v0.37.4
-	github.com/rodaine/table v1.1.0
 	github.com/samber/lo v1.38.1
 	github.com/spf13/cobra v1.7.0
 	github.com/stretchr/testify v1.8.4
@@ -48,7 +45,6 @@ require (
 	github.com/klauspost/reedsolomon v1.9.15 // indirect
 	github.com/kr/text v0.2.0 // indirect
 	github.com/leodido/go-urn v1.2.4 // indirect
-	github.com/mattn/go-runewidth v0.0.15 // indirect
 	github.com/matttproud/golang_protobuf_extensions v1.0.4 // indirect
 	github.com/onsi/ginkgo/v2 v2.11.0 // indirect
 	github.com/pion/dtls/v2 v2.2.7 // indirect
@@ -60,7 +56,6 @@ require (
 	github.com/prometheus/common v0.44.0 // indirect
 	github.com/prometheus/procfs v0.11.1 // indirect
 	github.com/quic-go/qtls-go1-20 v0.3.1 // indirect
-	github.com/rivo/uniseg v0.4.4 // indirect
 	github.com/rogpeppe/go-internal v1.11.0 // indirect
 	github.com/spf13/pflag v1.0.5 // indirect
 	github.com/templexxx/cpufeat v0.0.0-20180724012125-cef66df7f161 // indirect
