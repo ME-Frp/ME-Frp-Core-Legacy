@@ -9,7 +9,7 @@ if [ $? -ne 0 ]; then
 fi
 
 # Get version
-raw_version=`./bin/mefrps --version`
+raw_version=`./bin/mefrpc --version`
 frp_version=`echo $raw_version | sed 's/MEFrp_//g'`
 echo "build version: $frp_version"
 
@@ -37,15 +37,9 @@ for os in $os_all; do
                 if [ -f "./mefrpc_${suffix}.exe" ]; then
                     mv "./mefrpc_${suffix}.exe" "./packages/mefrpc_${suffix}_${frp_version}.exe"
                 fi
-                if [ -f "./mefrps_${suffix}.exe" ]; then
-                    mv "./mefrps_${suffix}.exe" "./packages/mefrps_${suffix}_${frp_version}.exe"
-                fi
             else
                 if [ -f "./mefrpc_${suffix}" ]; then
                     mv "./mefrpc_${suffix}" "./packages/mefrpc_${suffix}_${frp_version}"
-                fi
-                if [ -f "./mefrps_${suffix}" ]; then
-                    mv "./mefrps_${suffix}" "./packages/mefrps_${suffix}_${frp_version}"
                 fi
             fi
         done

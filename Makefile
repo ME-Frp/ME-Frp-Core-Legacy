@@ -26,9 +26,6 @@ gci:
 vet:
 	go vet ./...
 
-frps:
-	env CGO_ENABLED=0 go build -trimpath -ldflags "$(LDFLAGS)" -tags frps -o bin/mefrps ./cmd/frps
-
 frpc:
 	env CGO_ENABLED=0 go build -trimpath -ldflags "$(LDFLAGS)" -tags frpc -o bin/mefrpc ./cmd/frpc
 
@@ -52,13 +49,6 @@ e2e-compatibility-last-frpc:
 		TARGET_DIRNAME=lastversion ./hack/download.sh; \
 	fi
 	FRPC_PATH="`pwd`/lastversion/frpc" ./hack/run-e2e.sh
-	rm -r ./lastversion
-
-e2e-compatibility-last-frps:
-	if [ ! -d "./lastversion" ]; then \
-		TARGET_DIRNAME=lastversion ./hack/download.sh; \
-	fi
-	FRPS_PATH="`pwd`/lastversion/frps" ./hack/run-e2e.sh
 	rm -r ./lastversion
 
 alltest: vet gotest e2e
