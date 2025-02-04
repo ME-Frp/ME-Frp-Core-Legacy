@@ -4,10 +4,15 @@ LDFLAGS := -s -w
 
 all: env fmt build
 
-build: frpc
+build: frps frpc
 
 env:
 	@go version
+
+# compile assets into binary file
+file:
+	rm -rf ./assets/frps/static/*
+	cp -rf ./web/frps/dist/* ./assets/frps/static
 
 fmt:
 	go fmt ./...
@@ -20,6 +25,9 @@ gci:
 
 vet:
 	go vet ./...
+
+frps:
+	env CGO_ENABLED=0 go build -trimpath -ldflags "$(LDFLAGS)" -tags frps -o bin/mefrps ./cmd/frps
 
 frpc:
 	env CGO_ENABLED=0 go build -trimpath -ldflags "$(LDFLAGS)" -tags frpc -o bin/mefrpc ./cmd/frpc
@@ -46,8 +54,16 @@ e2e-compatibility-last-frpc:
 	FRPC_PATH="`pwd`/lastversion/frpc" ./hack/run-e2e.sh
 	rm -r ./lastversion
 
+e2e-compatibility-last-frps:
+	if [ ! -d "./lastversion" ]; then \
+		TARGET_DIRNAME=lastversion ./hack/download.sh; \
+	fi
+	FRPS_PATH="`pwd`/lastversion/frps" ./hack/run-e2e.sh
+	rm -r ./lastversion
+
 alltest: vet gotest e2e
 	
 clean:
 	rm -f ./bin/frpc
+	rm -f ./bin/frps
 	rm -rf ./lastversion

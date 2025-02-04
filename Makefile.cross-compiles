@@ -30,10 +30,15 @@ app:
 		\
 		echo "Build $${os}-$${arch}$${extra:+ ($${extra})}..."; \
 		env CGO_ENABLED=$${cgo} GOOS=$${os} GOARCH=$${arch} $${flags} go build -trimpath -ldflags "$(LDFLAGS)" -tags frpc -o ./release/mefrpc_$${target_suffix} ./cmd/frpc; \
+		env CGO_ENABLED=$${cgo} GOOS=$${os} GOARCH=$${arch} $${flags} go build -trimpath -ldflags "$(LDFLAGS)" -tags frps -o ./release/mefrps_$${target_suffix} ./cmd/frps; \
 		echo "Build $${os}-$${arch}$${extra:+ ($${extra})} done"; \
 	)
 
 	@mv ./release/mefrpc_windows_amd64 ./release/mefrpc_windows_amd64.exe
+	@mv ./release/mefrps_windows_amd64 ./release/mefrps_windows_amd64.exe
 	@mv ./release/mefrpc_windows_arm64 ./release/mefrpc_windows_arm64.exe
+	@mv ./release/mefrps_windows_arm64 ./release/mefrps_windows_arm64.exe
 	@mv ./release/mefrpc_windows_arm ./release/mefrpc_windows_arm.exe
+	@mv ./release/mefrps_windows_arm ./release/mefrps_windows_arm.exe
 	@mv ./release/mefrpc_windows_386 ./release/mefrpc_windows_386.exe
+	@mv ./release/mefrps_windows_386 ./release/mefrps_windows_386.exe
