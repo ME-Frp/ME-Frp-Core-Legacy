@@ -342,7 +342,7 @@ func createProxyConfig(proxy *ProxyConfigResp) config.ProxyConf {
 }
 
 func fetchProxyConfig(proxyId string, userToken string) (ProxyConfigResp, error) {
-	url := "https://mefrp-preview-api.lxhtt.cn/api/auth/easyStartup"
+	url := "https://preapi.mefrp.com/api/auth/easyStartup"
 	jsonBody := []byte(fmt.Sprintf(`{"proxyId": %s}`, proxyId))
 	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonBody))
 	if err != nil {
