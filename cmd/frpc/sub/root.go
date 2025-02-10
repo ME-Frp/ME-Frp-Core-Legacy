@@ -150,7 +150,7 @@ func runMultipleClients(cfgDir string) error {
 			defer wg.Done()
 			err := runClient(path)
 			if err != nil {
-				fmt.Printf("frpc service error for config file [%s]\n", path)
+				fmt.Printf("ME Frp 服务错误, 配置文件: %s\n", path)
 			}
 		}()
 		return nil
@@ -170,7 +170,7 @@ func runMultipleClientsEasyStart(userToken string, proxyId string) error {
 			defer wg.Done()
 			err := runClient(proxyId)
 			if err != nil {
-				fmt.Printf("frpc service error for config file [%s]\n", proxyId)
+				fmt.Printf("ME Frp 服务错误, 配置文件: %s\n", proxyId)
 			}
 		}(proxyId)
 	}
@@ -222,8 +222,8 @@ func startService(
 		cfg.LogMaxDays, cfg.DisableLogColor)
 
 	if cfgFile != "" {
-		log.Info("start frpc service for config file [%s]", cfgFile)
-		defer log.Info("frpc service for config file [%s] stopped", cfgFile)
+		log.Info("开始运行 ME Frp 服务, 配置文件: %s", cfgFile)
+		defer log.Info("ME Frp 服务已停止, 配置文件: %s", cfgFile)
 	}
 	svr, errRet := client.NewService(cfg, pxyCfgs, visitorCfgs, cfgFile)
 	if errRet != nil {
@@ -288,7 +288,7 @@ func runEasyStartup() error {
 	for _, proxy := range proxies {
 		pxyCfg := createProxyConfig(&proxy)
 		if pxyCfg == nil {
-			return fmt.Errorf("不支持的隧道类型: %s (支持的类型: tcp, http, https)", proxy.ProxyType)
+			return fmt.Errorf("不支持的隧道类型: %s (支持的类型: tcp, udp, http, https)", proxy.ProxyType)
 		}
 		pxyCfgs[proxy.ProxyName] = pxyCfg
 	}
@@ -309,6 +309,14 @@ func createProxyConfig(proxy *ProxyConfigResp) config.ProxyConf {
 		cfg.RemotePort = int(proxy.RemotePort)
 		cfg.UseEncryption = proxy.UseEncryption
 		cfg.UseCompression = proxy.UseCompression
+		pxyCfg = cfg
+	case "udp":
+		cfg := &config.UDPProxyConf{}
+		cfg.ProxyName = proxy.ProxyName
+		cfg.ProxyType = "udp"
+		cfg.LocalIP = proxy.LocalIp
+		cfg.LocalPort = int(proxy.LocalPort)
+		cfg.RemotePort = int(proxy.RemotePort)
 		pxyCfg = cfg
 	case "http":
 		cfg := &config.HTTPProxyConf{}
@@ -410,14 +418,14 @@ func parseClientCommonCfgFromCmd() (cfg config.ClientCommonConf, err error) {
 
 	ipStr, portStr, err := net.SplitHostPort(serverAddr)
 	if err != nil {
-		err = fmt.Errorf("invalid server_addr: %v", err)
+		err = fmt.Errorf("无效的 server_addr: %v", err)
 		return
 	}
 
 	cfg.ServerAddr = ipStr
 	cfg.ServerPort, err = strconv.Atoi(portStr)
 	if err != nil {
-		err = fmt.Errorf("invalid server_addr: %v", err)
+		err = fmt.Errorf("无效的 server_addr: %v", err)
 		return
 	}
 
@@ -437,7 +445,7 @@ func parseClientCommonCfgFromCmd() (cfg config.ClientCommonConf, err error) {
 
 	cfg.Complete()
 	if err = cfg.Validate(); err != nil {
-		err = fmt.Errorf("parse config error: %v", err)
+		err = fmt.Errorf("解析配置错误: %v", err)
 		return
 	}
 	return
