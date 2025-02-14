@@ -257,7 +257,7 @@ func startService(
 
 func runEasyStartup() error {
 	if userToken == "" || proxyId == "" {
-		return fmt.Errorf("使用快捷启动时, 用户Token 和 隧道Id 都是必需的")
+		return fmt.Errorf("使用快捷启动时, 用户 Token 和 隧道 Id 都是必需的")
 	}
 
 	proxyIds := strings.Split(proxyId, ",")
@@ -275,25 +275,35 @@ func runEasyStartup() error {
 		return fmt.Errorf("没有获取到任何隧道配置")
 	}
 
-	cfg := config.GetDefaultClientConf()
-	cfg.ServerAddr = proxies[0].NodeAddr
-	cfg.ServerPort = int(proxies[0].NodePort)
-	cfg.User = userToken
-	cfg.Token = proxies[0].NodeToken
-	cfg.LogLevel = "info"
-	cfg.LogFile = "console"
-	cfg.LogMaxDays = 3
-
-	pxyCfgs := make(map[string]config.ProxyConf)
 	for _, proxy := range proxies {
+		cfg := config.GetDefaultClientConf()
+		cfg.ServerAddr = proxy.NodeAddr
+		cfg.ServerPort = int(proxy.NodePort)
+		cfg.User = userToken
+		cfg.Token = proxy.NodeToken
+		cfg.LogLevel = "info"
+		cfg.LogFile = "console"
+		cfg.LogMaxDays = 3
+
+		pxyCfgs := make(map[string]config.ProxyConf)
 		pxyCfg := createProxyConfig(&proxy)
 		if pxyCfg == nil {
-			return fmt.Errorf("不支持的隧道类型: %s (支持的类型: tcp, udp, http, https)", proxy.ProxyType)
+			return fmt.Errorf("不支持的隧道类型: %s", proxy.ProxyType)
 		}
 		pxyCfgs[proxy.ProxyName] = pxyCfg
+
+		go func() {
+			if err := startService(cfg, pxyCfgs, nil, ""); err != nil {
+				fmt.Printf("启动隧道失败: %v\n", err)
+			}
+		}()
 	}
 
-	return startService(cfg, pxyCfgs, nil, "")
+	ch := make(chan os.Signal, 1)
+	signal.Notify(ch, syscall.SIGINT, syscall.SIGTERM)
+	<-ch
+
+	return nil
 }
 
 func createProxyConfig(proxy *ProxyConfigResp) config.ProxyConf {
