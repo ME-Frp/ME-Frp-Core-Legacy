@@ -20,6 +20,7 @@ import (
 	"io"
 	"net"
 	"runtime/debug"
+	"strings"
 	"time"
 
 	"github.com/fatedier/golib/control/shutdown"
@@ -173,12 +174,31 @@ func (ctl *Control) HandleNewProxyResp(inMsg *msg.NewProxyResp) {
 		cfg, ok := ctl.pxyCfgs[inMsg.ProxyName]
 		if !ok {
 			xl.Warn("内部错误：隧道 [%s] 未找到, 您可以继续使用本隧道", inMsg.ProxyName)
-			return
 		}
 		proxyAddr := inMsg.RemoteAddr
 		// 如果不是 http/https 类型，需要加上服务器地址
 		if cfg.GetBaseConfig().ProxyType != "http" && cfg.GetBaseConfig().ProxyType != "https" {
-			proxyAddr = fmt.Sprintf("%s:%s", ctl.clientCfg.ServerAddr, inMsg.RemoteAddr)
+			proxyAddr = fmt.Sprintf("%s%s", ctl.clientCfg.ServerAddr, inMsg.RemoteAddr)
+		} else {
+			// 对于 HTTP/HTTPS 类型，显示所有域名
+			var domains []string
+			switch cfg.GetBaseConfig().ProxyType {
+			case "http":
+				if httpCfg, ok := cfg.(*config.HTTPProxyConf); ok {
+					domains = httpCfg.CustomDomains
+				}
+			case "https":
+				if httpsCfg, ok := cfg.(*config.HTTPSProxyConf); ok {
+					domains = httpsCfg.CustomDomains
+				}
+			}
+			if len(domains) > 0 {
+				var addrs []string
+				for _, domain := range domains {
+					addrs = append(addrs, fmt.Sprintf("%s://%s", cfg.GetBaseConfig().ProxyType, domain))
+				}
+				proxyAddr = strings.Join(addrs, " 或 ")
+			}
 		}
 		xl.Info("启动 [%s] 隧道 [%s] 成功, 您可以使用 [%s] 访问您的服务",
 			cfg.GetBaseConfig().ProxyType,

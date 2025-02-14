@@ -147,6 +147,6 @@ func (pm *Manager) Reload(pxyCfgs map[string]config.ProxyConf) {
 		}
 	}
 	if len(addPxyNames) > 0 {
-		xl.Info("隧道 [%s] 登记成功", addPxyNames)
+		xl.Info("隧道 %s 登记成功", addPxyNames)
 	}
 }

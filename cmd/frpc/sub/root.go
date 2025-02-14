@@ -209,7 +209,28 @@ func runClient(cfgFilePath string) error {
 		fmt.Println(err)
 		return err
 	}
-	return startService(cfg, pxyCfgs, visitorCfgs, cfgFilePath)
+
+	// 创建一个 channel 用于接收系统信号
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+
+	// 创建一个 channel 用于等待服务结束
+	doneCh := make(chan error, 1)
+
+	// 启动服务
+	go func() {
+		if err := startService(cfg, pxyCfgs, visitorCfgs, cfgFilePath); err != nil {
+			doneCh <- err
+		}
+	}()
+
+	// 等待信号或服务结束
+	select {
+	case <-sigCh:
+		return nil
+	case err := <-doneCh:
+		return err
+	}
 }
 
 func startService(
@@ -222,18 +243,18 @@ func startService(
 		cfg.LogMaxDays, cfg.DisableLogColor)
 
 	if cfgFile != "" {
-		log.Info("开始运行 ME Frp 服务, 配置文件: %s", cfgFile)
-		defer log.Info("ME Frp 服务已停止, 配置文件: %s", cfgFile)
+		log.Info("开始运行 ME Frp 服务, 当前正在使用配置文件 [%s]", cfgFile)
+		defer log.Info("ME Frp 客户端已停止")
+	} else if cfg.User != "" {
+		log.Info("开始运行 ME Frp 服务, 当前正在使用快捷启动")
+		defer log.Info("ME Frp 客户端已停止")
 	}
+
 	svr, errRet := client.NewService(cfg, pxyCfgs, visitorCfgs, cfgFile)
 	if errRet != nil {
 		err = errRet
 		return
 	}
-
-	// 创建一个 channel 用于接收系统信号
-	sigCh := make(chan os.Signal, 1)
-	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 
 	// 创建一个 channel 用于等待服务结束
 	doneCh := make(chan error, 1)
@@ -245,14 +266,12 @@ func startService(
 		}
 	}()
 
-	// 等待信号或服务结束
-	select {
-	case <-sigCh:
+	// 等待服务结束
+	err = <-doneCh
+	if err != nil {
 		svr.GracefulClose(500 * time.Millisecond)
-		return nil
-	case err := <-doneCh:
-		return err
 	}
+	return err
 }
 
 func runEasyStartup() error {
@@ -266,7 +285,8 @@ func runEasyStartup() error {
 	for _, pid := range proxyIds {
 		proxyConfig, err := fetchProxyConfig(pid, userToken)
 		if err != nil {
-			return fmt.Errorf("获取隧道 [%s] 配置失败: %v", pid, err)
+			log.Warn("获取隧道 [%s] 配置失败: %v", pid, err)
+			continue
 		}
 		proxies = append(proxies, proxyConfig)
 	}
@@ -275,28 +295,33 @@ func runEasyStartup() error {
 		return fmt.Errorf("没有获取到任何隧道配置")
 	}
 
+	var wg sync.WaitGroup
 	for _, proxy := range proxies {
-		cfg := config.GetDefaultClientConf()
-		cfg.ServerAddr = proxy.NodeAddr
-		cfg.ServerPort = int(proxy.NodePort)
-		cfg.User = userToken
-		cfg.Token = proxy.NodeToken
-		cfg.LogLevel = "info"
-		cfg.LogFile = "console"
-		cfg.LogMaxDays = 3
+		wg.Add(1)
+		go func(proxy ProxyConfigResp) {
+			defer wg.Done()
 
-		pxyCfgs := make(map[string]config.ProxyConf)
-		pxyCfg := createProxyConfig(&proxy)
-		if pxyCfg == nil {
-			return fmt.Errorf("不支持的隧道类型: %s", proxy.ProxyType)
-		}
-		pxyCfgs[proxy.ProxyName] = pxyCfg
+			cfg := config.GetDefaultClientConf()
+			cfg.ServerAddr = proxy.NodeAddr
+			cfg.ServerPort = int(proxy.NodePort)
+			cfg.User = userToken
+			cfg.Token = proxy.NodeToken
+			cfg.LogLevel = "info"
+			cfg.LogFile = "console"
+			cfg.LogMaxDays = 3
 
-		go func() {
-			if err := startService(cfg, pxyCfgs, nil, ""); err != nil {
-				fmt.Printf("启动隧道失败: %v\n", err)
+			pxyCfgs := make(map[string]config.ProxyConf)
+			pxyCfg := createProxyConfig(&proxy)
+			if pxyCfg == nil {
+				log.Warn("不支持的隧道类型: %s", proxy.ProxyType)
+				return
 			}
-		}()
+			pxyCfgs[userToken+"."+proxy.ProxyName] = pxyCfg
+
+			if err := startService(cfg, pxyCfgs, nil, ""); err != nil {
+				log.Warn("启动隧道失败: %v", err)
+			}
+		}(proxy)
 	}
 
 	ch := make(chan os.Signal, 1)
@@ -309,10 +334,19 @@ func runEasyStartup() error {
 func createProxyConfig(proxy *ProxyConfigResp) config.ProxyConf {
 	var pxyCfg config.ProxyConf
 
+	// 解析 domain 字段
+	var domains []string
+	if proxy.Domain != "" {
+		if err := json.Unmarshal([]byte(proxy.Domain), &domains); err != nil {
+			// 如果解析失败,则将其作为单个域名处理
+			domains = []string{proxy.Domain}
+		}
+	}
+
 	switch proxy.ProxyType {
 	case "tcp":
 		cfg := &config.TCPProxyConf{}
-		cfg.ProxyName = proxy.ProxyName
+		cfg.ProxyName = userToken + "." + proxy.ProxyName
 		cfg.ProxyType = "tcp"
 		cfg.LocalIP = proxy.LocalIp
 		cfg.LocalPort = int(proxy.LocalPort)
@@ -322,7 +356,7 @@ func createProxyConfig(proxy *ProxyConfigResp) config.ProxyConf {
 		pxyCfg = cfg
 	case "udp":
 		cfg := &config.UDPProxyConf{}
-		cfg.ProxyName = proxy.ProxyName
+		cfg.ProxyName = userToken + "." + proxy.ProxyName
 		cfg.ProxyType = "udp"
 		cfg.LocalIP = proxy.LocalIp
 		cfg.LocalPort = int(proxy.LocalPort)
@@ -330,11 +364,11 @@ func createProxyConfig(proxy *ProxyConfigResp) config.ProxyConf {
 		pxyCfg = cfg
 	case "http":
 		cfg := &config.HTTPProxyConf{}
-		cfg.ProxyName = proxy.ProxyName
+		cfg.ProxyName = userToken + "." + proxy.ProxyName
 		cfg.ProxyType = "http"
 		cfg.LocalIP = proxy.LocalIp
 		cfg.LocalPort = int(proxy.LocalPort)
-		cfg.CustomDomains = []string{proxy.Domain}
+		cfg.CustomDomains = domains
 		cfg.HostHeaderRewrite = proxy.HostHeaderRewrite
 		cfg.Headers = map[string]string{
 			"X-From-Where": proxy.HeaderXFromWhere,
@@ -344,11 +378,11 @@ func createProxyConfig(proxy *ProxyConfigResp) config.ProxyConf {
 		pxyCfg = cfg
 	case "https":
 		cfg := &config.HTTPSProxyConf{}
-		cfg.ProxyName = proxy.ProxyName
+		cfg.ProxyName = userToken + "." + proxy.ProxyName
 		cfg.ProxyType = "https"
 		cfg.LocalIP = proxy.LocalIp
 		cfg.LocalPort = int(proxy.LocalPort)
-		cfg.CustomDomains = []string{proxy.Domain}
+		cfg.CustomDomains = domains
 		cfg.UseEncryption = proxy.UseEncryption
 		cfg.UseCompression = proxy.UseCompression
 		pxyCfg = cfg
