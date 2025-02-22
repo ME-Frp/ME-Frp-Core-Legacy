@@ -159,37 +159,10 @@ func runMultipleClients(cfgDir string) error {
 	return err
 }
 
-func runMultipleClientsEasyStart(userToken string, proxyId string) error {
-	var wg sync.WaitGroup
-
-	// 对于多个隧道，我们需要分割它们
-	proxyIdList := strings.Split(proxyId, ",")
-	for _, proxyId := range proxyIdList {
-		wg.Add(1)
-		go func(proxyId string) {
-			defer wg.Done()
-			err := runClient(proxyId)
-			if err != nil {
-				fmt.Printf("ME Frp 服务错误, 配置文件: %s\n", proxyId)
-			}
-		}(proxyId)
-	}
-
-	wg.Wait()
-	return nil
-}
-
 func Execute() {
 	if err := rootCmd.Execute(); err != nil {
 		os.Exit(1)
 	}
-}
-
-func handleTermSignal(svr *client.Service) {
-	ch := make(chan os.Signal, 1)
-	signal.Notify(ch, syscall.SIGINT, syscall.SIGTERM)
-	<-ch
-	svr.GracefulClose(500 * time.Millisecond)
 }
 
 func runClient(cfgFilePath string) error {
